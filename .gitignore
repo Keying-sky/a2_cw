@@ -1,0 +1,7 @@
+__pycache__/
+*.egg-info/
+
+results/**/*.npy
+results/**/*.png
+
+data/

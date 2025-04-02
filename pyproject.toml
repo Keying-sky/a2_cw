@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "a2cw"
+version = "0.1.0"
+description = "Data Science Applications to Medical Imaging"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Keying Song", email = "ks2146@cam.ac.uk"},
+]
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.4.0",
+    "scikit-image>=0.18.0",
+    "jupyter>=1.0.0",
+]
+
+
+[tool.setuptools]
+packages = ["a2cw"]
