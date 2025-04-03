@@ -8,11 +8,9 @@ def load_labels(data_path):
     """
     load the label file: labels.csv
     
-    Param: 
-        Path object, path to the data
+    Param: Path object, path to the data
     
-    Return: 
-        Dictionary, keys are IDs (str), values are labels: 1 (benign) or 2 (malignant) or 3 (malignant)
+    Return: Dictionary, keys are IDs (str), values are labels: 1 (benign) or 2 (malignant) or 3 (malignant) 
     """
     df = pd.read_csv(data_path/"labels.csv")
     
@@ -30,8 +28,7 @@ def extract_fea(scan, mask, n_bins=100):
         mask: 3D array of segmentation mask
         num_bins: Number of histogram bins
     
-    Return:
-        features: Dictionary containing 3 calculated features
+    Return: features: Dictionary containing 3 calculated features
     """
     voxels = scan[mask > 0]
 
@@ -55,8 +52,7 @@ def vis_fea(df):
     """
     Visualise radiomics features
     
-    Param:
-        df: DataFrame containing features and labels
+    Param: df: DataFrame containing features and labels   
     """
     plt.figure(figsize=(15, 10), dpi=300)
     
@@ -87,8 +83,7 @@ def analyse(df):
     """
     Analyse the features
     
-    Param:
-        df: DataFrame containing features and labels
+    Param: df: DataFrame containing features and labels
     """
     
     fea_cols = [col for col in df.columns if col != 'label']

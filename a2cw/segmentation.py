@@ -107,60 +107,146 @@ def subvolume(scan, range, pad=(30, 30, 5)):
     
     return subv
 
-def segment(subvolume, mask, threshold_min=None, threshold_max=None):
+def boundary_aware(subvolume, init_seg, boundary):
     """
-    Threshold segmentation.
+    An adaptive boundary segmentation method.
     
     Params:
-        subvolume: 3D array, the subvolume scanned
-        mask: 3D array, true segmentation mask
-        threshold_min: Minimum threshold
-        threshold_max: Maximum threshold
+        subvolume: subvolume of the CT scaned
+        init_seg: Initial threshold segmentation
+        boundary: Widths of outer boundary (3D)
     
-    Return: 3D array, segmentation result 
+    Return:
+        refined_seg: Result after boundary segmentation.
     """
-    if threshold_min is None or threshold_max is None:
-        voxel_values = subvolume[np.where(mask > 0)]
-        
-        if threshold_min is None:
-            threshold_min = np.percentile(voxel_values, 10)
-        
-        if threshold_max is None:
-            threshold_max = np.percentile(voxel_values, 90)
+    import numpy as np
+    from scipy import ndimage
     
-    segmentation = np.zeros_like(subvolume)
-    segmentation[(subvolume >= threshold_min) & (subvolume <= threshold_max)] = 1
+    x_size, y_size, z_size = subvolume.shape
+    bound_mask = np.zeros_like(subvolume, dtype=bool)
     
-    return segmentation
+    bound_mask[:boundary[0], :, :] = True
+    bound_mask[x_size-boundary[0]:, :, :] = True
+    bound_mask[:, :boundary[1], :] = True
+    bound_mask[:, y_size-boundary[1]:, :] = True
+    bound_mask[:, :, :boundary[2]] = True
+    bound_mask[:, :, z_size-boundary[2]:] = True
+    
+    # mark every segments
+    labeled_segments, n_seg = ndimage.label(init_seg)
 
-def otsu_segment(subvolume):
+    refined_seg = np.zeros_like(init_seg)
+
+    for segment_id in range(1, n_seg + 1):
+        current_seg = (labeled_segments == segment_id)
+        # split current segment to A (outside boundary) and B (inside boundary)
+        A = current_seg & bound_mask
+        B = current_seg & ~bound_mask
+        
+        # calculate sizes
+        A_voxels = np.sum(A)
+        B_voxels = np.sum(B)
+        
+        # completely outside the boundary, remove all
+        if B_voxels == 0:
+            continue  
+        
+        # completely inside the boundary，save all
+        if A_voxels == 0:
+            refined_seg = refined_seg | current_seg
+            continue
+        
+        # for fragments riding on the boundary
+        if A_voxels > B_voxels:
+            # find the largest other internal fragements
+            other_internal_segments = np.zeros_like(init_seg, dtype=bool)
+            for other_id in range(1, n_seg + 1):
+                if other_id != segment_id:
+                    other_segment = (labeled_segments == other_id)
+                    other_internal = other_segment & ~bound_mask
+                    other_internal_segments = other_internal_segments | other_internal
+            
+            # find the largest internal fragment (if has)
+            if np.any(other_internal_segments):
+                labeled_other, n_other = ndimage.label(other_internal_segments)
+                if n_other > 0:
+                    other_sizes = np.bincount(labeled_other.ravel())
+                    other_sizes[0] = 0  # ignore the background
+                    max_other_size = np.max(other_sizes) if len(other_sizes) > 1 else 0
+                    
+                    # remove A, save B
+                    if B_voxels > max_other_size:
+                        refined_seg = refined_seg | B
+                    else:
+                        # remove (A+B)
+                        continue
+                else:
+                    # save B
+                    refined_seg = refined_seg | B
+            else:
+                # save B
+                refined_seg = refined_seg | B
+        else:
+            # save A+B
+            refined_seg = refined_seg | current_seg
+    
+    return refined_seg
+
+def adapt_thd_segm(subv, mask=None, margin_factor=0.1, boundary=None, morph=True):         
     """
-    Otsu thresholding segmentation.
+    An adaptive threshold segmentation method with adaptive boundary aware segmentation.
     
     Params:
-        subvolume: 3D array, the subvolume scanned
-        mask: 3D array, true segmentation mask (not used in Otsu method)
-        threshold_min: Minimum threshold (not used in Otsu method)
-        threshold_max: Maximum threshold (not used in Otsu method)
+        subv: subvolume of the CT scaned
+        mask: Reference mask to calculate the initial threshold
+        margin_factor: Threshold min/max expansion factor
+        boundary: Widths of outer boundary (3D)
+        morph: Whether to apply morphology clean up
     
-    Return: 3D array, segmentation result 
+    Return:
+        seg: the final segmentation
     """
-    from skimage.filters import threshold_otsu
+    import numpy as np
+    from scipy import ndimage
     
-    segmentation = np.zeros_like(subvolume)
-    
-    flat_data = subvolume.flatten()
-    
-    try:
-        otsu_threshold = threshold_otsu(flat_data)
+    if mask is not None:
+        mask_indices = np.where(mask > 0)
+        voxel_values = subv[mask_indices]
         
-        segmentation[subvolume > otsu_threshold] = 1
-    except Exception as e:
-        # if fails (e.g., data change is small), fall back to the base threshold
-        print(f"Otsu thresholding failed: {e}. Using basic thresholding instead.")
-        segmentation[subvolume > np.mean(subvolume)] = 1  # use the mean as threshold
+        thrh_min = np.percentile(voxel_values, 10)
+        thrh_max = np.percentile(voxel_values, 90)
+        
+        range_width = thrh_max - thrh_min
+        thrh_min -= range_width * margin_factor
+        thrh_max += range_width * margin_factor
+    else:
+        # otsu method if no reference mask
+        from skimage.filters import threshold_otsu
+        thrh_otsu = threshold_otsu(subv)
+        
+        thrh_min = thrh_otsu
+        thrh_max = np.max(subv)
+
+        seg = np.zeros_like(subv, dtype=np.uint8)
+        seg[(subv >= thrh_min) & (subv <= thrh_max)] = 1
+        return seg
+
+    # initial segmentation
+    init_seg = np.zeros_like(subv, dtype=np.uint8)
+    init_seg[(subv >= thrh_min) & (subv <= thrh_max)] = 1
     
-    return segmentation
+    if morph:
+        init_seg = ndimage.binary_opening(init_seg, structure=np.ones((2,2,2)))
+        init_seg = ndimage.binary_closing(init_seg, structure=np.ones((3,3,3)))
+    
+    if boundary is not None:
+        seg = boundary_aware(subv, init_seg, boundary)
+        if morph:
+            seg = ndimage.binary_opening(seg, structure=np.ones((1,1,1)))
+    else:
+        seg = ndimage.binary_opening(init_seg, structure=np.ones((1,1,1)))
+    
+    return seg
 
 def evaluate(segmentation, ground_truth):
     """

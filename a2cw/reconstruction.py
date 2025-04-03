@@ -2,12 +2,12 @@ import numpy as np
 from skimage.transform import radon, iradon, iradon_sart, resize 
 from scipy.ndimage import zoom
 ## ----------------------------- Ex1.1 ----------------------------- ##
-def correct_ct(sinogram, dark, flat):
+def correct_ct(sino, dark, flat):
     """
     Correct the CT sinogram using dark and flat fields.
     
     Parameters:
-        sinogram : ndarray, raw CT sinogram data
+        sino : ndarray, raw CT sinogram data
             
         dark : ndarray, dark field measurement (background noise)
             
@@ -16,60 +16,60 @@ def correct_ct(sinogram, dark, flat):
     Returns:
         ndarray, corrected sinogram 
     """
-    sinogram_corrected = sinogram - dark
+    sino_corrected = sino - dark
     
     denominator = flat - dark
     denominator[denominator <= 0] = 1.0 
     
     with np.errstate(divide='ignore', invalid='ignore'):
-        corrected = -np.log(sinogram_corrected / denominator)
+        corrected = -np.log(sino_corrected / denominator)
     
     # infinity and NaN
     corrected[np.isinf(corrected) | np.isnan(corrected)] = 0
     
     return corrected
 
-def correct_pet(sinogram, calibration):
+def correct_pet(sino, calibration):
     """
-    Correct the PET sinogram using detector gain calibration.
+    Correct the PET sino using detector gain calibration.
     
     Parameters:
-        sinogram : ndarray, raw PET sinogram data
+        sino : ndarray, raw PET sino data
         calibration : ndarray, detector gain calibration data
 
     Returns:
-        ndarray, corrected sinogram  
+        ndarray, corrected sino  
     """
     calibration_safe = np.copy(calibration)
     calibration_safe[calibration_safe == 0] = 1.0
     
-    corrected = sinogram / calibration_safe
+    corrected = sino / calibration_safe
     
     return corrected
 
 ## ----------------------------- Ex1.2 ----------------------------- ##
-def fbp(sinogram, theta):
+def fbp(sino, theta):
     """
     Reconstruct CT image using FBP method.
     
     Parameters:
-        sinogram: Corrected CT sinogram
+        sino: Corrected CT sino
         theta: Projection Angle Array
         
     Returns: 
         Reconstructed CT image
     """
 
-    recons = iradon(sinogram, theta=theta, filter_name='ramp', interpolation='linear', circle=True)
+    recons = iradon(sino, theta=theta, filter_name='ramp', interpolation='linear', circle=True)
                     
     return recons
 
-def os_sart(sinogram, theta, n_iter=50, n_subset=10, relaxation=0.5):
+def os_sart(sino, theta, n_iter=50, n_subset=10, relaxation=0.5):
     """
     Reconstruct CT image using OS-SART method.
     
     Parameters:
-        sinogram : Corrected CT sinogram
+        sino : Corrected CT sinogram
         theta: Projection Angle Array
         n_iter: Number of iterations
         relaxation: The relaxation parameter
@@ -78,9 +78,9 @@ def os_sart(sinogram, theta, n_iter=50, n_subset=10, relaxation=0.5):
     Returns: 
         Reconstructed CT image
     """
-    _, n_angles = sinogram.shape
+    _, n_angles = sino.shape
     
-    image_shape = iradon(sinogram[:, :1], theta=[theta[0]], filter_name=None).shape
+    image_shape = iradon(sino[:, :1], theta=[theta[0]], filter_name=None).shape
     x = np.zeros(image_shape)
     
     angle_idxs = np.arange(n_angles)
@@ -89,7 +89,7 @@ def os_sart(sinogram, theta, n_iter=50, n_subset=10, relaxation=0.5):
     for i in range(n_iter):
         for subset_idx, subset in enumerate(subsets):
             subset_theta = theta[subset]
-            subset_sino = sinogram[:, subset]
+            subset_sino = sino[:, subset]
 
             x = iradon_sart(
                 subset_sino, 
@@ -105,24 +105,24 @@ def os_sart(sinogram, theta, n_iter=50, n_subset=10, relaxation=0.5):
 
     return x
 
-def sirt(sinogram, theta, n_iter=20, relaxation=0.5):
+def sirt(sino, theta, n_iter=20, relaxation=0.5):
     """
     Reconstruct CT image using SIRT method.
     
     Parameters:
-        sinogram : Corrected CT sinogram
+        sino : Corrected CT sinogram
         theta: Projection Angle Array
         n_iter: Number of iterations
         relaxation: The relaxation parameter
         
     Returns: Reconstructed CT image
     """
-    image_shape = iradon(sinogram[:, :1], theta=[theta[0]], filter_name=None).shape
+    image_shape = iradon(sino[:, :1], theta=[theta[0]], filter_name=None).shape
     x = np.zeros(image_shape)
     
     for i in range(n_iter):
         x = iradon_sart(
-            sinogram, 
+            sino, 
             theta=theta,
             image=x,
             relaxation=relaxation
@@ -162,22 +162,19 @@ def resize_ct(ct_image, ct_psize=1.06, pet_psize=4.24):
     return resized_image
 
 def attenuation_map(ct_image):
-    """
-
-    """
     attenuation_map = np.zeros_like(ct_image)
 
     # Air and Lungs (HU < -950)
     air_mask = ct_image < -950
     attenuation_map[air_mask] = 0.0
     
-    # soft tissue (-950 <= HU <= 100)
+    # soft tissue (-950 <= HU <= 50)
     soft_tissue_mask = (-950 <= ct_image) & (ct_image <= 100)
-    attenuation_map[soft_tissue_mask] = 0.096 * (1 + ct_image[soft_tissue_mask]/1000)
+    attenuation_map[soft_tissue_mask] = 9.6e-5 * (ct_image[soft_tissue_mask] + 1000)
     
-    # skeleton (HU > 100)
+    # skeleton (HU > 50)
     bone_mask = ct_image > 100
-    attenuation_map[bone_mask] = 0.096 * (1.42 + 0.00789 * (ct_image[bone_mask]/1000))
+    attenuation_map[bone_mask] = 3.64e-5 * (ct_image[bone_mask] + 1000) + 0.0626
     
     return attenuation_map
 
@@ -185,9 +182,9 @@ def attenuation_sino(attenuation_map, pet_sino_shape):
     """
  
     """
-    num_angles = pet_sino_shape[1]
+    n_angle = pet_sino_shape[1]
     
-    theta = np.linspace(0, 180, num_angles, endpoint=False)
+    theta = np.linspace(0, 180, n_angle, endpoint=False)
     
     attenuation_sino = radon(attenuation_map, theta=theta, circle=True)
 
@@ -203,40 +200,50 @@ def attenuation_corr(pet_sino, attenuation_sino):
     """
 
     """
-    attenuation_correction_factors = np.exp(attenuation_sino)
+    acf = np.exp(attenuation_sino)
 
-    pet_sino_attn_corrected = pet_sino * attenuation_correction_factors
+    pet_sino_attn_corrected = pet_sino * acf
     
     return pet_sino_attn_corrected
 
 ## ----------------------------- Ex1.4 ----------------------------- ##
-def osem(sinogram, theta=None, num_iterations=10, num_subsets=10):
+def osem(sino, theta=None, n_iter=10, n_subset=10):
     """
+    OSEM method to reconstruct the PET image.
 
+    Params:
+        sino: PET sinogram to be reconstructed
+        theta: Projection Angle Array
+        n_iter: Number of iterations
+        n_subset: Number of splited subsets
+
+    Returns:
+        x: Reconstruction pet image
+        intermediates: The intermediate images for visulisation
     """
     if theta is None:
-        num_angles = sinogram.shape[1]
-        theta = np.linspace(0, 180, num_angles, endpoint=False)
+        n_angle = sino.shape[1]
+        theta = np.linspace(0, 180, n_angle, endpoint=False)
     
-    _, num_angles = sinogram.shape
+    _, n_angle = sino.shape
     
-    image_shape = iradon(sinogram[:, :1], theta=[theta[0]], filter_name=None).shape
+    image_shape = iradon(sino[:, :1], theta=[theta[0]], filter_name=None).shape
     x = np.ones(image_shape)
     
-    indices = np.arange(num_angles)
+    indices = np.arange(n_angle)
     np.random.shuffle(indices)
-    subsets = np.array_split(indices, num_subsets)
+    subsets = np.array_split(indices, n_subset)
     
     # store intermediate results to visualise the convergence process
-    intermediate_images = []
+    intermediates = []
     
-    for iteration in range(num_iterations):
-        if iteration % 2 == 0: 
-            intermediate_images.append(x.copy())
+    for iter in range(n_iter):
+        if iter % 2 == 0: 
+            intermediates.append(x.copy())
         
         for _, subset in enumerate(subsets):
             subset_theta = theta[subset]
-            subset_sino = sinogram[:, subset]
+            subset_sino = sino[:, subset]
             
             forward_projection = radon(x, theta=subset_theta, circle=True)
             
@@ -244,59 +251,66 @@ def osem(sinogram, theta=None, num_iterations=10, num_subsets=10):
             
             ratio = subset_sino / forward_projection
             
-            backprojection = iradon(ratio, theta=subset_theta, 
-                                   filter_name=None, circle=True)
+            backprojection = iradon(ratio, theta=subset_theta, filter_name=None, circle=True)              
             
-            ones_backprojection = iradon(np.ones_like(ratio), theta=subset_theta, 
-                                       filter_name=None, circle=True)
+            ones_backprojection = iradon(np.ones_like(ratio), theta=subset_theta, filter_name=None, circle=True)
+                                       
             ones_backprojection[ones_backprojection < 1e-8] = 1e-8
             
             x *= backprojection / ones_backprojection
 
             x[x < 0] = 0
 
-    intermediate_images.append(x.copy())
+    intermediates.append(x.copy())
     
-    return x, intermediate_images
+    return x, intermediates
 
-def mlem(sinogram, theta=None, num_iterations=20):
+def mlem(sino, theta=None, n_iter=10):
     """
+    MLEM method to reconstruct the PET image.
 
+    Params:
+        sino: PET sinogram to be reconstructed
+        theta: Projection Angle Array
+        n_iter: Number of iterations
+
+    Returns:
+        x: Reconstruction pet image
+        intermediates: The intermediate images for visulisation
     """
     if theta is None:
-        num_angles = sinogram.shape[1]
-        theta = np.linspace(0, 180, num_angles, endpoint=False)
+        n_angle = sino.shape[1]
+        theta = np.linspace(0, 180, n_angle, endpoint=False)
     
-    _, num_angles = sinogram.shape
+    _, n_angle = sino.shape
     
     # initialise
-    image_shape = iradon(sinogram[:, :1], theta=[theta[0]], filter_name=None).shape
+    image_shape = iradon(sino[:, :1], theta=[theta[0]], filter_name=None).shape
     x = np.ones(image_shape)
     
     # store intermediate results to visualise the convergence process
-    intermediate_images = []
+    intermediates = []
     
-    for iteration in range(num_iterations):
-        if iteration % 2 == 0: 
-            intermediate_images.append(x.copy())
+    for iter in range(n_iter):
+        if iter % 2 == 0: 
+            intermediates.append(x.copy())
         
         forward_projection = radon(x, theta=theta, circle=True)
         
         forward_projection[forward_projection < 1e-8] = 1e-8
 
-        ratio = sinogram / forward_projection
+        ratio = sino / forward_projection
         
-        backprojection = iradon(ratio, theta=theta, 
-                               filter_name=None, circle=True)
-        
-        ones_backprojection = iradon(np.ones_like(ratio), theta=theta, 
-                                   filter_name=None, circle=True)
+        backprojection = iradon(ratio, theta=theta, filter_name=None, circle=True)
+
+        ones_backprojection = iradon(np.ones_like(ratio), theta=theta, filter_name=None, circle=True)
+                                   
         ones_backprojection[ones_backprojection < 1e-8] = 1e-8
 
         x *= backprojection / ones_backprojection
         
         x[x < 0] = 0
     
-    intermediate_images.append(x.copy())
+    intermediates.append(x.copy())
     
-    return x, intermediate_images
+    return x, intermediates
