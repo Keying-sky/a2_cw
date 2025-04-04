@@ -14,7 +14,7 @@ The main structure of the package `a2cw` is like:
 ├── a2cw/
 │   ├── __init__.py               # expose all classes and functions for importing
 │   ├── classification.py         # module for Ex3.2
-│   ├── denoising.py              # module for Ex2.2
+│   ├── denoising.py              # module for Ex2.1~2.2
 │   ├── reconstruction.py         # module for Ex1.1~1.5
 │   └── segmentation.py           # module for Ex3.1
 |

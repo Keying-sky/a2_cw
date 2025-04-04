@@ -2,6 +2,8 @@ import os
 import numpy as np
 import nibabel as nib
 import matplotlib.pyplot as plt
+from scipy import ndimage
+from skimage.filters import threshold_otsu
 
 def load_nii(data_path):
     """
@@ -119,8 +121,6 @@ def boundary_aware(subvolume, init_seg, boundary):
     Return:
         refined_seg: Result after boundary segmentation.
     """
-    import numpy as np
-    from scipy import ndimage
     
     x_size, y_size, z_size = subvolume.shape
     bound_mask = np.zeros_like(subvolume, dtype=bool)
@@ -221,7 +221,6 @@ def adapt_thd_segm(subv, mask=None, margin_factor=0.1, boundary=None, morph=True
         thrh_max += range_width * margin_factor
     else:
         # otsu method if no reference mask
-        from skimage.filters import threshold_otsu
         thrh_otsu = threshold_otsu(subv)
         
         thrh_min = thrh_otsu

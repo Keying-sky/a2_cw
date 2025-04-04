@@ -18,6 +18,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def eval_denois(origi_im, denoised_im, noise_region=None, signal_region=None):
+    """
+    Evaluate the performance of image denoising by comparing original and denoised images.
+    
+    Params:
+        origi_im: Original image before denoising    
+        denoised_im: Denoised image to be evaluated           
+        noise_region: Boolean mask indicating regions of noise for SNR calculation   
+        signal_region: Boolean mask indicating regions of signal for SNR calculation
+           
+    Return:
+        Dictionary containing calculated metrics
+    """
     results = {}
 
     orig_norm = (origi_im - np.min(origi_im)) / (np.max(origi_im) - np.min(origi_im))
@@ -43,6 +55,19 @@ def eval_denois(origi_im, denoised_im, noise_region=None, signal_region=None):
     return results
 
 def compare_methods(origi_im, denoised_ims_dict, noise_region=None, signal_region=None):
+    """
+    Compare multiple denoising methods using various image quality metrics.
+    
+    Params
+    ----------
+    origi_im: Original image before denoising   
+    denoised_ims_dict: Dictionary mapping method names to their corresponding denoised images   
+    noise_region: Boolean mask indicating regions of noise for SNR calculation
+    signal_region: Boolean mask indicating regions of signal for SNR calculation
+        
+    Return: Nested dictionary with method names as keys and their evaluation results as values.
+            Each value is a dictionary containing the metrics from eval_denois()
+    """
     all_results = {}
 
     for method_name, denoised_im in denoised_ims_dict.items():
@@ -92,6 +117,18 @@ def compare_methods(origi_im, denoised_ims_dict, noise_region=None, signal_regio
     return all_results
 
 def s_n_masks(magnitude_image, signal_threshold=0.2, noise_threshold=0.1):
+    """
+    Generate signal and noise masks for an image based on intensity thresholds.
+    
+    Params:
+        magnitude_image: Input image from which to generate masks   
+        signal_threshold: Normalised intensity threshold to identify signal regions
+        noise_threshold: Normalised intensity threshold to identify noise regions           
+        
+    Returns:
+        signal_mask : Boolean array indicating signal regions
+        noise_mask : Boolean array indicating noise regions
+    """
     # normalise
     img_norm = (magnitude_image - np.min(magnitude_image)) / (np.max(magnitude_image) - np.min(magnitude_image))
     
@@ -111,7 +148,14 @@ def s_n_masks(magnitude_image, signal_threshold=0.2, noise_threshold=0.1):
     return signal_mask, noise_mask
 
 def visual_masks(image, signal_mask, noise_mask):
-
+    """
+    Visualise the original image along with signal and noise masks.
+    
+    Parameters
+        image: Original image to visualise     
+        signal_mask: Boolean mask indicating signal regions (displayed in green)      
+        noise_mask: Boolean mask indicating noise regions (displayed in red)      
+    """
     plt.figure(figsize=(15, 5))
     
     plt.subplot(1, 3, 1)

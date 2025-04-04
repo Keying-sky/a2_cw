@@ -50,11 +50,11 @@ def extract_fea(scan, mask, n_bins=100):
 
 def vis_fea(df):
     """
-    Visualise radiomics features
+    Visualise radiomics features.
     
     Param: df: DataFrame containing features and labels   
     """
-    plt.figure(figsize=(15, 10), dpi=300)
+    plt.figure(figsize=(11, 7), dpi=130)
     
     feature_columns = [col for col in df.columns if col != 'label']
     
@@ -66,7 +66,7 @@ def vis_fea(df):
     
     plt.show()
     
-    plt.figure(figsize=(10, 8), dpi=300)
+    plt.figure(figsize=(7, 5), dpi=150)
     corr = df[feature_columns].corr()
     sns.heatmap(corr, annot=True, cmap='coolwarm')
     plt.title('Feature Correlation')
@@ -74,14 +74,14 @@ def vis_fea(df):
     plt.show()
 
     g = sns.pairplot(df, hue='label')
-    g.fig.set_dpi(300)  
+    g.fig.set_dpi(160)  
     plt.suptitle('Feature Pairplot by Label', y=1.02)
     plt.show()
 
 
 def analyse(df):
     """
-    Analyse the features
+    Statisticallt analyse the features.
     
     Param: df: DataFrame containing features and labels
     """

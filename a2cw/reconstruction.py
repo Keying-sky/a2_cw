@@ -6,14 +6,12 @@ def correct_ct(sino, dark, flat):
     """
     Correct the CT sinogram using dark and flat fields.
     
-    Parameters:
+    Params:
         sino : ndarray, raw CT sinogram data
-            
-        dark : ndarray, dark field measurement (background noise)
-            
+        dark : ndarray, dark field measurement (background noise)   
         flat : ndarray, flat field measurement (reference beam without sample)
 
-    Returns:
+    Return:
         ndarray, corrected sinogram 
     """
     sino_corrected = sino - dark
@@ -33,11 +31,11 @@ def correct_pet(sino, calibration):
     """
     Correct the PET sino using detector gain calibration.
     
-    Parameters:
+    Params:
         sino : ndarray, raw PET sino data
         calibration : ndarray, detector gain calibration data
 
-    Returns:
+    Return:
         ndarray, corrected sino  
     """
     calibration_safe = np.copy(calibration)
@@ -52,11 +50,11 @@ def fbp(sino, theta):
     """
     Reconstruct CT image using FBP method.
     
-    Parameters:
+    Params:
         sino: Corrected CT sino
         theta: Projection Angle Array
         
-    Returns: 
+    Return: 
         Reconstructed CT image
     """
 
@@ -68,14 +66,14 @@ def os_sart(sino, theta, n_iter=50, n_subset=10, relaxation=0.5):
     """
     Reconstruct CT image using OS-SART method.
     
-    Parameters:
+    Params:
         sino : Corrected CT sinogram
         theta: Projection Angle Array
         n_iter: Number of iterations
         relaxation: The relaxation parameter
         num_subset: Number of subsets
         
-    Returns: 
+    Return: 
         Reconstructed CT image
     """
     _, n_angles = sino.shape
@@ -87,7 +85,7 @@ def os_sart(sino, theta, n_iter=50, n_subset=10, relaxation=0.5):
     subsets = np.array_split(angle_idxs, n_subset)
     
     for i in range(n_iter):
-        for subset_idx, subset in enumerate(subsets):
+        for _, subset in enumerate(subsets):
             subset_theta = theta[subset]
             subset_sino = sino[:, subset]
 
@@ -99,9 +97,6 @@ def os_sart(sino, theta, n_iter=50, n_subset=10, relaxation=0.5):
             )
 
             x[x < 0] = 0
-            
-        if (i + 1) % 5 == 0:
-            print(f"OS-SART complete the iteration {i + 1}/{n_iter}")
 
     return x
 
@@ -109,13 +104,13 @@ def sirt(sino, theta, n_iter=20, relaxation=0.5):
     """
     Reconstruct CT image using SIRT method.
     
-    Parameters:
+    Params:
         sino : Corrected CT sinogram
         theta: Projection Angle Array
         n_iter: Number of iterations
         relaxation: The relaxation parameter
         
-    Returns: Reconstructed CT image
+    Return: Reconstructed CT image
     """
     image_shape = iradon(sino[:, :1], theta=[theta[0]], filter_name=None).shape
     x = np.zeros(image_shape)
@@ -129,10 +124,7 @@ def sirt(sino, theta, n_iter=20, relaxation=0.5):
         )
 
         x[x < 0] = 0
-
-        if (i + 1) % 5 == 0:
-            print(f"SIRT complete the iteration {i + 1}/{n_iter}")
-    
+         
     return x
 
 ## ----------------------------- Ex1.3 ----------------------------- ##
@@ -140,7 +132,7 @@ def resize_ct(ct_image, ct_psize=1.06, pet_psize=4.24):
     """
     Resize CT images to match the pixel size of PET images.
     
-    Parameters:
+    Params:
         ct_image: Reconstructed CT image
         ct_psize: CT pixel size (mm)
         pet_psize: PET pixel size (mm)
@@ -162,6 +154,17 @@ def resize_ct(ct_image, ct_psize=1.06, pet_psize=4.24):
     return resized_image
 
 def attenuation_map(ct_image):
+    """
+    Convert a CT image to a 511 keV photon attenuation coefficient map.
+    
+    This function uses a piecewise linear transformation to convert Hounsfield Units (HU)
+    to attenuation coefficients (mu) at 511 keV, which is the energy of PET photons. 
+    
+    Params:
+        ct_image: Input CT image in Hounsfield Units
+        
+    Return: Attenuation coefficient map, representing the linear attenuation coefficients at 511 keV
+        """
     attenuation_map = np.zeros_like(ct_image)
 
     # Air and Lungs (HU < -950)
@@ -169,18 +172,25 @@ def attenuation_map(ct_image):
     attenuation_map[air_mask] = 0.0
     
     # soft tissue (-950 <= HU <= 50)
-    soft_tissue_mask = (-950 <= ct_image) & (ct_image <= 100)
+    soft_tissue_mask = (-950 <= ct_image) & (ct_image <= 50)
     attenuation_map[soft_tissue_mask] = 9.6e-5 * (ct_image[soft_tissue_mask] + 1000)
     
     # skeleton (HU > 50)
-    bone_mask = ct_image > 100
+    bone_mask = ct_image > 50
     attenuation_map[bone_mask] = 3.64e-5 * (ct_image[bone_mask] + 1000) + 0.0626
     
     return attenuation_map
 
 def attenuation_sino(attenuation_map, pet_sino_shape):
     """
- 
+    Generate a sinogram of attenuation coefficients from an attenuation map.
+
+    Params:
+        attenuation_map: 2D array of attenuation coefficients at 511 keV  
+        pet_sino_shape: Shape of the target PET sinogram
+            
+    Return:
+        Sinogram of attenuation values
     """
     n_angle = pet_sino_shape[1]
     
@@ -198,7 +208,14 @@ def attenuation_sino(attenuation_map, pet_sino_shape):
 
 def attenuation_corr(pet_sino, attenuation_sino):
     """
-
+    Apply attenuation correction to a PET sinogram.
+    
+    Params:
+        pet_sino: Uncorrected PET sinogram data
+        attenuation_sino: Sinogram of attenuation values
+        
+    Return:
+        Attenuation-corrected PET sinogram
     """
     acf = np.exp(attenuation_sino)
 
